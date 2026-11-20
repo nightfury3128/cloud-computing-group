@@ -1,0 +1,4 @@
+# Install with: pip install -r requirements.txt
+# Tested with pandas 2.3.3 and 3.0.6
+pandas>=2.0,<4
+numpy>=1.24

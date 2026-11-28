@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Household {{ hshd_num }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <h1>Household <span class="mono">#{{ hshd_num }}</span></h1>
+    <p class="muted">
+      {% if summary.first_date and summary.last_date %}
+        Activity {{ summary.first_date }} → {{ summary.last_date }} ·
+      {% endif %}
+      {{ "{:,}".format(summary.lines) }} lines · {{ "{:,}".format(summary.baskets) }} baskets
+    </p>
+  </div>
+  <form class="search-inline" method="post" action="{{ url_for('household.search_submit') }}" role="search">
+    <input name="hshd_num" placeholder="Open another HSHD_NUM…" inputmode="numeric" pattern="[0-9]+">
+    <button class="btn btn-primary" type="submit">Open</button>
+  </form>
+</header>
+
+<section class="kpis">
+  <article class="kpi">
+    <div class="kpi-label">Total spend</div>
+    <div class="kpi-value">${{ "{:,.2f}".format(summary.total_spend) }}</div>
+  </article>
+  <article class="kpi">
+    <div class="kpi-label">Baskets</div>
+    <div class="kpi-value">{{ "{:,}".format(summary.baskets) }}</div>
+  </article>
+  <article class="kpi">
+    <div class="kpi-label">Units</div>
+    <div class="kpi-value">{{ "{:,.0f}".format(summary.total_units) }}</div>
+  </article>
+  <article class="kpi">
+    <div class="kpi-label">Transactions</div>
+    <div class="kpi-value">{{ "{:,}".format(summary.lines) }}</div>
+  </article>
+</section>
+
+<section class="grid-2">
+  <article class="card">
+    <header><h2>Demographics</h2></header>
+    {% if household %}
+    <dl class="dl">
+      <dt>Loyalty flag</dt><dd>{{ household.L or "—" }}</dd>
+      <dt>Age range</dt><dd>{{ household.AGE_RANGE or "—" }}</dd>
+      <dt>Marital</dt><dd>{{ household.MARITAL or "—" }}</dd>
+      <dt>Income</dt><dd>{{ household.INCOME_RANGE or "—" }}</dd>
+      <dt>Homeowner</dt><dd>{{ household.HOMEOWNER or "—" }}</dd>
+      <dt>Composition</dt><dd>{{ household.HSHD_COMPOSITION or "—" }}</dd>
+      <dt>Size</dt><dd>{{ household.HH_SIZE or "—" }}</dd>
+      <dt>Children</dt><dd>{{ household.CHILDREN or "—" }}</dd>
+    </dl>
+    {% else %}
+    <p class="muted">Demographics not on file for this household.</p>
+    {% endif %}
+  </article>
+
+  <article class="card">
+    <header>
+      <h2>Private-label savings <span class="pill">estimate</span></h2>
+    </header>
+    <dl class="dl">
+      <dt>Private spend</dt><dd>${{ "{:,.2f}".format(private_label.private_spend) }}</dd>
+      <dt>National spend</dt><dd>${{ "{:,.2f}".format(private_label.national_spend) }}</dd>
+      <dt>Private share</dt><dd>{{ private_label.private_share_pct }}%</dd>
+      <dt>Est. saved vs. national</dt><dd>${{ "{:,.2f}".format(private_label.est_savings_realised) }}</dd>
+      <dt>Potential more</dt><dd>${{ "{:,.2f}".format(private_label.est_savings_potential) }}</dd>
+    </dl>
+    <p class="muted small">Assumes a 22% private vs. national discount. Update once Member B publishes a model-based estimate.</p>
+  </article>
+</section>
+
+<section class="grid-3">
+  <article class="card">
+    <header><h2>Churn risk</h2></header>
+    {% if churn %}
+    <div class="kpi-value">{{ (churn.score*100)|round(0) }}%</div>
+    <p class="muted">Label: <strong>{{ churn.label or "—" }}</strong> · as of {{ churn.as_of or "—" }}</p>
+    {% else %}
+    <p class="muted">Awaiting churn results from Member B/C (<code>data/analytics/churn/{{ hshd_num }}.json</code>).</p>
+    {% endif %}
+  </article>
+  <article class="card">
+    <header><h2>Lifetime value</h2></header>
+    {% if clv %}
+    <div class="kpi-value">${{ "{:,.2f}".format(clv.predicted_clv_usd) }}</div>
+    <p class="muted">Horizon: {{ clv.horizon_months or "—" }} mo · {{ clv.model or "" }}</p>
+    {% else %}
+    <p class="muted">Awaiting CLV prediction (<code>data/analytics/clv/{{ hshd_num }}.json</code>).</p>
+    {% endif %}
+  </article>
+  <article class="card">
+    <header><h2>Basket recommendations</h2></header>
+    {% if recs and recs.items %}
+    <ol class="rec-list">
+      {% for item in recs.items[:6] %}
+      <li>
+        <div class="mono">#{{ item.product_num }}</div>
+        <div>{{ item.label or "" }}</div>
+        {% if item.reason %}<div class="muted small">{{ item.reason }}</div>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="muted">Awaiting recommendations (<code>data/analytics/recommendations/{{ hshd_num }}.json</code>).</p>
+    {% endif %}
+  </article>
+</section>
+
+<section class="grid-2">
+  <article class="card">
+    <header><h2>Spend by department</h2></header>
+    <div class="chart-wrap"><canvas id="chartHhDept" height="220"></canvas></div>
+  </article>
+  <article class="card">
+    <header><h2>Monthly spend</h2></header>
+    <div class="chart-wrap"><canvas id="chartHhTrend" height="220"></canvas></div>
+  </article>
+</section>
+
+<article class="card">
+  <header><h2>Top commodities</h2></header>
+  <table class="table compact">
+    <thead><tr><th>Commodity</th><th>Department</th><th class="num">Lines</th><th class="num">Spend</th></tr></thead>
+    <tbody>
+      {% for r in by_commodity %}
+      <tr>
+        <td>{{ r.commodity or "—" }}</td>
+        <td>{{ r.department or "—" }}</td>
+        <td class="num">{{ "{:,}".format(r.lines) }}</td>
+        <td class="num">${{ "{:,.2f}".format(r.spend) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</article>
+
+<article class="card">
+  <header>
+    <h2>Transactions</h2>
+    <p class="muted small">
+      Sorted HSHD_NUM → BASKET_NUM → DATE → PRODUCT_NUM → DEPARTMENT → COMMODITY.
+      Showing {{ (page - 1) * per_page + 1 }}–{{ [page * per_page, total]|min }} of {{ "{:,}".format(total) }}.
+    </p>
+  </header>
+  <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>HSHD</th><th>Basket</th><th>Date</th><th>Product</th>
+          <th>Department</th><th>Commodity</th>
+          <th class="num">Spend</th><th class="num">Units</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="mono">{{ r.HSHD_NUM }}</td>
+          <td class="mono">{{ r.BASKET_NUM }}</td>
+          <td>{{ r.PURCHASE_DATE }}</td>
+          <td class="mono">{{ r.PRODUCT_NUM }}</td>
+          <td>{{ r.DEPARTMENT or "—" }}</td>
+          <td>{{ r.COMMODITY or "—" }}</td>
+          <td class="num">${{ "%.2f"|format(r.SPEND or 0) }}</td>
+          <td class="num">{{ "%.0f"|format(r.UNITS or 0) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="muted">No transactions.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total_pages > 1 %}
+  <nav class="pager" aria-label="Pagination">
+    {% if page > 1 %}
+      <a class="btn btn-ghost btn-sm" href="?page={{ page - 1 }}&per_page={{ per_page }}">← Prev</a>
+    {% endif %}
+    <span class="muted small">Page {{ page }} / {{ total_pages }}</span>
+    {% if page < total_pages %}
+      <a class="btn btn-ghost btn-sm" href="?page={{ page + 1 }}&per_page={{ per_page }}">Next →</a>
+    {% endif %}
+  </nav>
+  {% endif %}
+</article>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"
+        integrity="sha384-9MhbyIRcBVQiiC7FSd7T38oJNj2Zh+EfxS7/vjhBi4OOT78NlHSnzM31EZRWR1LZ"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+  const hhDept  = {{ by_dept|tojson }};
+  const hhTrend = {{ trend|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/household.js') }}"></script>
+{% endblock %}

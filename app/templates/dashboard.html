@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <h1>Retail analytics overview</h1>
+    <p class="muted">Live metrics from Azure SQL. Returns and negative-spend lines are
+    included in totals (count &amp; spend); exclude them in analysis as needed.</p>
+  </div>
+  <form class="search-inline" method="post" action="{{ url_for('household.search_submit') }}" role="search">
+    <input name="hshd_num" placeholder="Search HSHD_NUM…" inputmode="numeric" pattern="[0-9]+" aria-label="HSHD_NUM">
+    <button class="btn btn-primary" type="submit">Open</button>
+  </form>
+</header>
+
+<section class="kpis">
+  <article class="kpi">
+    <div class="kpi-label">Households</div>
+    <div class="kpi-value">{{ "{:,}".format(totals.households) }}</div>
+    <div class="kpi-sub">unique HSHD_NUMs loaded</div>
+  </article>
+  <article class="kpi">
+    <div class="kpi-label">Transactions</div>
+    <div class="kpi-value">{{ "{:,}".format(totals.transactions) }}</div>
+    <div class="kpi-sub">line items, incl. returns</div>
+  </article>
+  <article class="kpi">
+    <div class="kpi-label">Products</div>
+    <div class="kpi-value">{{ "{:,}".format(totals.products) }}</div>
+    <div class="kpi-sub">catalogue size</div>
+  </article>
+  <article class="kpi">
+    <div class="kpi-label">Baskets</div>
+    <div class="kpi-value">{{ "{:,}".format(totals.baskets) }}</div>
+    <div class="kpi-sub">distinct BASKET_NUM</div>
+  </article>
+  <article class="kpi kpi-wide">
+    <div class="kpi-label">Total spend</div>
+    <div class="kpi-value">${{ "{:,.2f}".format(totals.total_spend) }}</div>
+    <div class="kpi-sub">net of returns (SPEND&lt;0 kept per README)</div>
+  </article>
+</section>
+
+<section class="grid-2">
+  <article class="card">
+    <header><h2>Spend by year</h2></header>
+    <div class="chart-wrap"><canvas id="chartYear" height="220"></canvas></div>
+    <table class="table compact">
+      <thead><tr><th>Year</th><th class="num">Lines</th><th class="num">Spend</th></tr></thead>
+      <tbody>
+        {% for r in by_year %}
+        <tr>
+          <td>{{ r.year }}</td>
+          <td class="num">{{ "{:,}".format(r.lines) }}</td>
+          <td class="num">${{ "{:,.2f}".format(r.spend) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="muted">No transactions yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </article>
+
+  <article class="card">
+    <header><h2>Top departments by spend</h2></header>
+    <div class="chart-wrap"><canvas id="chartDept" height="220"></canvas></div>
+    <table class="table compact">
+      <thead><tr><th>Department</th><th class="num">Spend</th></tr></thead>
+      <tbody>
+        {% for r in by_dept %}
+        <tr>
+          <td>{{ r.department or "— (unknown)" }}</td>
+          <td class="num">${{ "{:,.2f}".format(r.spend) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </article>
+</section>
+
+<article class="card">
+  <header><h2>Monthly spend trend</h2></header>
+  <div class="chart-wrap"><canvas id="chartMonth" height="200"></canvas></div>
+</article>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"
+        integrity="sha384-9MhbyIRcBVQiiC7FSd7T38oJNj2Zh+EfxS7/vjhBi4OOT78NlHSnzM31EZRWR1LZ"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+  const byYear  = {{ by_year|tojson }};
+  const byDept  = {{ by_dept|tojson }};
+  const byMonth = {{ by_month|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

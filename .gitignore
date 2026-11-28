@@ -1,2 +1,28 @@
 .DS_Store
 /data/raw
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Flask
+instance/
+
+# Uploads (runtime)
+/uploads/
+/app/uploads/
+
+# Editor
+.vscode/
+.idea/
+

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Retail Analytics{% endblock %} · Retail Analytics</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9B%92%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="shell">
+  <aside class="side" aria-label="Primary">
+    <a class="brand" href="{{ url_for('dashboard.home') if g.user else url_for('auth.login') }}">
+      <span class="brand-mark">RA</span>
+      <span>Retail Analytics</span>
+    </a>
+    {% if g.user %}
+    <nav class="nav">
+      <a href="{{ url_for('dashboard.home') }}" class="{% if request.endpoint == 'dashboard.home' %}on{% endif %}">
+        <span class="icon">▦</span> Dashboard
+      </a>
+      <a href="{{ url_for('household.search') }}" class="{% if request.endpoint and request.endpoint.startswith('household.') %}on{% endif %}">
+        <span class="icon">⌕</span> Households
+      </a>
+      <a href="{{ url_for('household.detail', hshd_num=10) }}">
+        <span class="icon">★</span> Household 10
+      </a>
+      <a href="{{ url_for('upload.form') }}" class="{% if request.endpoint == 'upload.form' or request.endpoint == 'upload.submit' %}on{% endif %}">
+        <span class="icon">↥</span> Upload CSV
+      </a>
+    </nav>
+    <div class="side-foot">
+      <div class="who">
+        <div class="avatar">{{ g.user.username[0]|upper }}</div>
+        <div class="who-meta">
+          <div class="who-name">{{ g.user.username }}</div>
+          <div class="who-email">{{ g.user.email }}</div>
+        </div>
+      </div>
+      <form method="post" action="{{ url_for('auth.logout') }}">
+        <button type="submit" class="btn btn-ghost btn-sm">Sign out</button>
+      </form>
+    </div>
+    {% else %}
+    <nav class="nav">
+      <a href="{{ url_for('auth.login') }}">Sign in</a>
+      <a href="{{ url_for('auth.register') }}">Register</a>
+    </nav>
+    {% endif %}
+  </aside>
+
+  <main id="main" class="main">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      <div class="flashes" role="status">
+        {% for cat, msg in messages %}
+          <div class="flash flash-{{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

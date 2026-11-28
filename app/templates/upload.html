@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Upload CSV{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <h1>Upload CSV</h1>
+    <p class="muted">Accepts both cleaned files (ISO dates, plain integers) and the raw
+    format from the data provider (padded headers, "null" strings, DD-MON-YY dates).</p>
+  </div>
+</header>
+
+<section class="card">
+  <form method="post" action="{{ url_for('upload.submit') }}" enctype="multipart/form-data" class="upload">
+    <fieldset>
+      <legend>Dataset</legend>
+      <label class="radio"><input type="radio" name="kind" value="households" required> Households</label>
+      <label class="radio"><input type="radio" name="kind" value="products"> Products</label>
+      <label class="radio"><input type="radio" name="kind" value="transactions"> Transactions</label>
+    </fieldset>
+    <label class="field">
+      <span>CSV file</span>
+      <input type="file" name="file" accept=".csv" required>
+    </label>
+    <button class="btn btn-primary" type="submit">Upload</button>
+  </form>
+
+  <details class="hint">
+    <summary>Required columns</summary>
+    <ul>
+      <li><strong>Households</strong>: HSHD_NUM (required), L, AGE_RANGE, MARITAL, INCOME_RANGE, HOMEOWNER, HSHD_COMPOSITION, HH_SIZE, CHILDREN</li>
+      <li><strong>Products</strong>: PRODUCT_NUM (required), DEPARTMENT, COMMODITY, BRAND_TY, NATURAL_ORGANIC_FLAG</li>
+      <li><strong>Transactions</strong>: BASKET_NUM, HSHD_NUM, PURCHASE_, PRODUCT_NUM, SPEND, UNITS, STORE_R, WEEK_NUM, YEAR (DATE optional)</li>
+    </ul>
+  </details>
+</section>
+
+{% if result %}
+<section class="card">
+  <header><h2>Import report — {{ result.kind }}</h2></header>
+  <dl class="dl">
+    <dt>Rows received</dt><dd>{{ "{:,}".format(result.received) }}</dd>
+    <dt>Inserted</dt><dd>{{ "{:,}".format(result.inserted) }}</dd>
+    <dt>Skipped (duplicate PK)</dt><dd>{{ "{:,}".format(result.skipped_duplicates) }}</dd>
+    <dt>Skipped (invalid)</dt><dd>{{ "{:,}".format(result.skipped_bad_rows) }}</dd>
+  </dl>
+  {% if result.errors %}
+  <h3>First errors</h3>
+  <ul class="err-list">
+    {% for e in result.errors %}<li class="mono small">{{ e }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

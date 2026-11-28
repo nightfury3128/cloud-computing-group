@@ -1,0 +1,194 @@
+import csv
+import os
+from pathlib import Path
+from decimal import Decimal
+
+import mssql_python
+
+ROOT = Path(__file__).resolve().parents[1]
+DATA = ROOT / "data" / "clean"
+
+EXPECTED = {
+    "households": 400,
+    "products": 67284,
+    "transactions": 84609,
+}
+
+INTEGER_FIELDS = {
+    "HSHD_NUM", "PRODUCT_NUM", "BASKET_NUM",
+    "YEAR", "WEEK_NUM",
+}
+DECIMAL_FIELDS = {"SPEND", "UNITS"}
+
+PRIMARY_KEYS = {
+    "households": "HSHD_NUM",
+    "products": "PRODUCT_NUM",
+}
+
+
+def sql_type(column):
+    if column in INTEGER_FIELDS:
+        return "BIGINT"
+    if column in DECIMAL_FIELDS:
+        return "DECIMAL(18,4)"
+    if column == "DATE":
+        return "DATE"
+    return "NVARCHAR(255)"
+
+
+def convert(column, value):
+    if value is None or not value.strip():
+        return None
+    if column in INTEGER_FIELDS:
+        return int(value)
+    if column in DECIMAL_FIELDS:
+        return Decimal(value)
+    return value
+
+
+def load_csv(table):
+    path = DATA / f"{table}.csv"
+
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        columns = reader.fieldnames
+
+        if not columns:
+            raise ValueError(f"Missing CSV headers: {path}")
+
+        rows = [
+            tuple(convert(col, row[col]) for col in columns)
+            for row in reader
+        ]
+
+    if len(rows) != EXPECTED[table]:
+        raise ValueError(
+            f"{table}: expected {EXPECTED[table]}, got {len(rows)}"
+        )
+
+    return columns, rows
+
+
+def create_table(cursor, table, columns):
+    definitions = [
+        f"[{col}] {sql_type(col)}"
+        for col in columns
+    ]
+
+    if table in PRIMARY_KEYS:
+        key = PRIMARY_KEYS[table]
+        definitions.append(
+            f"CONSTRAINT [PK_{table}] PRIMARY KEY ([{key}])"
+        )
+
+    ddl = ", ".join(definitions)
+
+    cursor.execute(
+        f"IF OBJECT_ID('dbo.{table}', 'U') IS NULL "
+        f"CREATE TABLE dbo.[{table}] ({ddl})"
+    )
+
+
+def main():
+    server = os.environ["SQL_SERVER"]
+    if not server.endswith(".database.windows.net"):
+        server += ".database.windows.net"
+
+    conn = mssql_python.connect(
+        server=server,
+        database=os.environ["SQL_DB"],
+        uid=os.environ["SQL_ADMIN"],
+        pwd=os.environ["SQL_PASSWORD"],
+        encrypt="yes",
+        trustservercertificate="no",
+        autocommit=False,
+    )
+
+    try:
+        cursor = conn.cursor()
+
+        # Validate all CSV inputs before writing.
+        datasets = {
+            table: load_csv(table)
+            for table in EXPECTED
+        }
+
+        # Refuse to modify already-populated tables.
+        for table in EXPECTED:
+            cursor.execute(
+                "SELECT COUNT(*) FROM sys.tables "
+                "WHERE name = ? AND schema_id = SCHEMA_ID('dbo')",
+                (table,)
+            )
+            exists = cursor.fetchone()[0] > 0
+
+            if not exists:
+                continue
+
+            cursor.execute(f"SELECT COUNT(*) FROM dbo.[{table}]")
+            result = cursor.fetchone()
+
+            if result[0] > 0:
+                raise RuntimeError(
+                    f"{table} already contains records. "
+                    "Import cancelled to protect existing data."
+                )
+
+        for table, (columns, rows) in datasets.items():
+            print(f"Creating table: {table}", flush=True)
+            create_table(cursor, table, columns)
+
+            names = ", ".join(f"[{col}]" for col in columns)
+            placeholders = ", ".join("?" for _ in columns)
+
+            statement = (
+                f"INSERT INTO dbo.[{table}] ({names}) "
+                f"VALUES ({placeholders})"
+            )
+
+            for start in range(0, len(rows), 500):
+                batch = rows[start:start + 500]
+                cursor.executemany(statement, batch)
+
+                if (start // 500) % 20 == 0:
+                    print(
+                        f"{table}: {min(start + 500, len(rows)):,}"
+                        f"/{len(rows):,}",
+                        flush=True
+                    )
+
+            cursor.execute(
+                f"SELECT COUNT(*) FROM dbo.[{table}]"
+            )
+            count = cursor.fetchone()[0]
+            print(f"{table}: {count:,} rows verified")
+
+            if count != EXPECTED[table]:
+                raise RuntimeError(
+                    f"Incorrect count in {table}: {count}"
+                )
+
+        cursor.execute(
+            "SELECT COUNT(*) FROM dbo.transactions "
+            "WHERE HSHD_NUM = 10"
+        )
+        count = cursor.fetchone()[0]
+        print(f"Household 10: {count} transactions")
+
+        if count != 137:
+            raise RuntimeError(
+                f"Expected 137 transactions, got {count}"
+            )
+
+        conn.commit()
+        print("SUCCESS: All data imported into Azure SQL.")
+
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Household search{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <h1>Households</h1>
+    <p class="muted">Search any HSHD_NUM. Join across households → products → transactions happens server-side.</p>
+  </div>
+</header>
+
+<section class="card">
+  <form method="get" action="{{ url_for('household.search') }}" class="search-row" role="search">
+    <input name="q" value="{{ q }}" placeholder="HSHD_NUM (e.g. 10)" autocomplete="off"
+           inputmode="numeric" pattern="[0-9]*" aria-label="HSHD_NUM">
+    <button class="btn btn-primary" type="submit">Search</button>
+    {% if q %}<a class="btn btn-ghost" href="{{ url_for('household.search') }}">Clear</a>{% endif %}
+  </form>
+
+  {% if q and not q.isdigit() %}
+    <p class="muted">Enter a numeric HSHD_NUM.</p>
+  {% elif q and not results %}
+    <p class="muted">No households match <strong>{{ q }}</strong>.</p>
+  {% endif %}
+
+  {% if results %}
+  <table class="table">
+    <thead><tr><th>HSHD_NUM</th><th>Composition</th><th>Income</th><th></th></tr></thead>
+    <tbody>
+      {% for r in results %}
+      <tr>
+        <td class="mono">{{ r.HSHD_NUM }}</td>
+        <td>{{ r.HSHD_COMPOSITION or "—" }}</td>
+        <td>{{ r.INCOME_RANGE or "—" }}</td>
+        <td class="num"><a class="btn btn-ghost btn-sm" href="{{ url_for('household.detail', hshd_num=r.HSHD_NUM) }}">Open →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section class="card">
+  <header><h2>Try an example</h2></header>
+  <p class="muted">The assignment uses HSHD_NUM = 10 as the sanity check (137 transactions).</p>
+  <p><a class="btn btn-primary" href="{{ url_for('household.detail', hshd_num=10) }}">Open household 10</a></p>
+</section>
+{% endblock %}
